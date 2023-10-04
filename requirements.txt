@@ -4,7 +4,6 @@ tensorboardx
 sklearn
 einops
 timm
-math
 pathlib
 scipy
 trimesh
