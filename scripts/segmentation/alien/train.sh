@@ -1,4 +1,4 @@
-python3.9 train_seg.py train \
+python3.9 train_alien.py train \
   --dataroot ./datasets/alien_small/ \
 	--weight_decay 0.05 --optim adamw \
 	--lr 1e-4 --n_epoch 100 --gamma 0.1 \
