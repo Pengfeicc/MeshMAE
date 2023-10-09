@@ -7,3 +7,4 @@ timm
 pathlib
 scipy
 trimesh
+torchmetrics
