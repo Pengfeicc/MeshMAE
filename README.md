@@ -24,20 +24,18 @@ To install PyGem, please refer to [Pygem](https://github.com/mathLab/PyGeM).
 ### Datasets
 Here, we provide the download links of the datasets for pre-train, classification and segmentation. 
 
-- ModelNet40 [here](https://drive.google.com/file/d/1Cf5zQqN-kAXF7OiZZ0hNNPT59J-Ijy-i/view?usp=sharing)
-- Humanbody [here](https://drive.google.com/file/d/1XaqMC8UrIZ_N77gN83PI3VK03G5IJskt/view?usp=sharing)
 - COSEG-aliens [here](https://drive.google.com/file/d/12QCv2IUySoSzxeuvERGzgmE7YY3QzjfW/view?usp=sharing)
-- ShapeNet [here](https://shapenet.org)（we also provide the processed ShapeNet dataset as [here](https://pan.baidu.com/s/1w044bIgiCMY0WXD9QviUJg?pwd=ufb9)）
+- Only for test -> alien_small dataset: 40 objs & 40 jsons for train, 5 objs & 5 jsons for valid, 5 objs & 5 jsons for test
 
 
 
 
 Please create a new folder 'datasets' in the main root, and put the downloaded datasets in this folder. And '--dataroot' in the 'xxx.sh' refers to the root of datasets. 
 
-For example, the root of ModelNet40 should be:
+For example, the root of alien_small dataset for test should be:
 
 ```
---dataroot ./dataset/Manifold40-MAPS-96-3/ 
+--dataroot ./dataset/alien_small/ 
 ```
 
 
@@ -68,20 +66,6 @@ sh scripts/pretrain/train_pretrain.sh
 
 
 ## Downstream Tasks
-
-### Classification
-
-* To train the classification model from scratch, run this command:
-
-```
-sh scripts/classification/train.sh
-```
-
-* To finetune the classification model, run this command:
-```
-sh scripts/classification/train_finetune.sh
-```
-
 
 ### Segmentation
 
