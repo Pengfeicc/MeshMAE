@@ -379,7 +379,7 @@ class ClassificationDataset(data.Dataset):
 
 
 class SegmentationDataset(data.Dataset):
-    def __init__(self, dataroot, train=True, augments=None):
+    def __init__(self, dataroot, mode="train", augments=None):
         super().__init__()
 
         self.dataroot = dataroot
@@ -388,7 +388,7 @@ class SegmentationDataset(data.Dataset):
         # if train and augments:
         # self.augments = augments
         self.augments = augments
-        self.mode = 'train' if train else 'test'
+        self.mode = mode
         self.feats = ['area', 'face_angles', 'curvs', 'normal']
 
         self.mesh_paths = []
@@ -421,13 +421,20 @@ class SegmentationDataset(data.Dataset):
                 request=self.feats)
 
             return faces_patcha, feats_patcha, Fs_patcha, center_patcha, cordinates_patcha, label_patcha
-        else:
+        elif self.mode == 'val':
             faces_patcha, feats_patcha, Fs_patcha, center_patcha, cordinates_patcha, label_patcha = load_mesh_seg(
                 self.mesh_paths[idx],
                 normalize=True,
                 request=self.feats)
 
-            return faces_patcha, feats_patcha, Fs_patcha, center_patcha, cordinates_patcha, label_patcha
+            return faces_patcha, feats_patcha, Fs_patcha, center_patcha, cordinates_patcha, label_patcha, self.mesh_paths[idx]
+        elif self.mode == 'test':
+            faces_patcha, feats_patcha, Fs_patcha, center_patcha, cordinates_patcha, label_patcha = load_mesh_seg(
+                self.mesh_paths[idx],
+                normalize=True,
+                request=self.feats)
+            
+            return faces_patcha, feats_patcha, Fs_patcha, center_patcha, cordinates_patcha, label_patcha, self.mesh_paths[idx]
 
     def __len__(self):
         return len(self.mesh_paths)
