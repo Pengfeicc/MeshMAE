@@ -139,11 +139,11 @@ if __name__ == '__main__':
     if args.augment_deformation:
         augments.append('deformation')
     #train_dataset = SegmentationDataset(dataroot, mode='train', augments=augments)
-    val_dataset = SegmentationDataset(dataroot, mode='test')  #path: datasets/alien_small/test
+    test_dataset = SegmentationDataset(dataroot, mode='test')  #path: datasets/alien_small/test
 
-    print("The number of files in test dataset:", len(val_dataset))
+    print("The number of files in test dataset:", len(test_dataset))
 
-    test_data_loader = data.DataLoader(val_dataset, num_workers=args.n_worker, batch_size=args.batch_size,
+    test_data_loader = data.DataLoader(test_dataset, num_workers=args.n_worker, batch_size=args.batch_size,
                                       shuffle=False, pin_memory=True)
     # ========== Network ==========
 
