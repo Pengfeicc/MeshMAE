@@ -15,8 +15,9 @@ import random
 from model.dataset import SegmentationDataset
 from model.meshmae import Mesh_baseline_seg
 from model.reconstruction import save_results
-from torchmetrics.classification import MulticlassJaccardIndex
 import sys
+from metrics import jaccard_index
+from torchmetrics.classification import MulticlassJaccardIndex
 
 sys.setrecursionlimit(3000)
 
@@ -30,83 +31,122 @@ def seed_torch(seed=42):
 
 def train(net, optim, criterion, train_dataset, epoch, args):
     net.train()
-    running_loss = 0
-    running_corrects = 0
-    n_samples = 0
+    training_loss = 0
+    training_corrects = 0
+    train_n_samples = 0
     patch_size = 64
     num_of_patch = 0
-    for i, (face_patch, feats_patch, np_Fs, center_patch, coordinate_patch, labels) in enumerate(
-            train_dataset):
-        optim.zero_grad()
-        faces = face_patch.cuda()   #faces-> ([2, 256, 64, 3])
-        patch_size = faces.size(2)   #patch_size-> 64
-        num_of_patch = faces.size(1)   #num_of_patch-> 256
+    train_accuracies, train_ious = [], []
+    # training loop
+    for i, (face_patch, feats_patch, np_Fs, center_patch, coordinate_patch, train_labels) in enumerate(train_dataset):
+        optim.zero_grad() # 梯度清零
+        train_faces = face_patch.cuda() 
+        patch_size = train_faces.size(2)
+        num_of_patch = train_faces.size(1) 
 
-        feats = feats_patch.to(torch.float32).cuda()   #feats-> ([2, 256, 64, 10])
-        centers = center_patch.to(torch.float32).cuda()   #centers-> ([2, 256, 64, 3])
-        Fs = np_Fs.cuda()   #Fs-> ([2, 256, 64, 1])
-        cordinates = coordinate_patch.to(torch.float32).cuda()  #cordinates-> ([2, 256, 64, 9])
-        labels = labels.to(torch.long).cuda()   #labels-> ([2, 256, 64, 1])
+        train_feats = feats_patch.to(torch.float32).cuda()
+        train_centers = center_patch.to(torch.float32).cuda() 
+        train_Fs = np_Fs.cuda() # torch.Size([2, 256, 64, 1])
+        train_cordinates = coordinate_patch.to(torch.float32).cuda()
+        train_labels = train_labels.to(torch.long).cuda()
 
-        labels = labels.reshape(faces.shape[0], -1)   #labels-> ([2, 16384])
-        n_samples += faces.shape[0]   #n_samples-> 2, 4, ...
+        train_labels = train_labels.reshape(train_faces.shape[0], -1) 
 
-        outputs, outputs_seg = net(faces, feats, centers, Fs, cordinates)
-        outputs = outputs.reshape(faces.shape[0], -1, args.seg_parts).permute(0, 2, 1)
-        outputs_seg = outputs_seg.reshape(faces.shape[0], -1, args.seg_parts).permute(0, 2, 1)
+        train_n_samples += train_faces.shape[0] 
 
-        dim = outputs.shape[1]
+        train_outputs, train_outputs_seg = net(train_faces, train_feats, train_centers, train_Fs, train_cordinates) 
+        train_outputs = train_outputs.reshape(train_faces.shape[0], -1, args.seg_parts).permute(0, 2, 1) # torch.Size([2, 4, 16384])
+        train_outputs_seg = train_outputs_seg.reshape(train_faces.shape[0], -1, args.seg_parts).permute(0, 2, 1) # torch.Size([2, 4, 16384])
 
-        loss = criterion(outputs, labels)
-        loss_seg = criterion(outputs_seg, labels)
-        loss = args.lw1 * loss + args.lw2 * loss_seg
+        dim = train_outputs.shape[1]
 
-        _, preds = torch.max(outputs_seg, 1)   #preds-> ([2, 16384])
+        train_loss = criterion(train_outputs, train_labels) 
+        train_loss_seg = criterion(train_outputs_seg, train_labels) 
+        train_total_loss = args.lw1 * train_loss + args.lw2 * train_loss_seg
 
-        ####  assume the batch_size = 2  ####
-        if i % 2 == 0:
-            # calculate iou
-            labels = labels.to(device)
-            preds = preds.to(device)
-            iou = MulticlassJaccardIndex(num_classes=4).to(device)
+        _, train_preds = torch.max(train_outputs_seg, 1) # torch.Size([2, 16384])
+        
+        # calculate iou & accuracy per batch size
+        if i % 2 == 0:         
+            train_labels = train_labels.to(device)
+            train_preds = train_preds.to(device)
+            # average train_IoU score for classes
+            train_iou = MulticlassJaccardIndex(num_classes=4).to(device)
            
-            iou = iou(labels, preds)
-           
-            correct_preds = torch.sum(preds == labels.data)
-            total_preds = labels.numel()
-            accuracy = correct_preds / total_preds
+            correct_preds = torch.sum(train_preds == train_labels.data)
+            total_preds = train_labels.numel() #计算labels中元素的总数
+            train_accuracy = correct_preds / total_preds
 
-            ious.append(iou)
-            accuracies.append(accuracy)
-            print(f"IoU: {iou}; Accuracy: {accuracy}")
-       
-        """
-        iteration 0
-        IoU: 0.06368255615234375; Accuracy: 0.254730224609375
-        IoU: 0.07048210501670837; Accuracy: 0.281707763671875
-        IoU: 0.0514175221323967; Accuracy: 0.2054443359375
-        IoU: 0.0644511952996254; Accuracy: 0.257049560546875
-        IoU: 0.0889020636677742; Accuracy: 0.349578857421875
-        IoU: 0.07759857177734375; Accuracy: 0.310394287109375
-        IoU: 0.15658432245254517; Accuracy: 0.402587890625
-        IoU: 0.08056781440973282; Accuracy: 0.315185546875
-        IoU: 0.11690718680620193; Accuracy: 0.285491943359375
-        IoU: 0.10627412796020508; Accuracy: 0.341949462890625
-        epoch: 0 Train Loss: 5.4496 Acc: 0.2752
-        """        
-        ####
-                
-        running_corrects += torch.sum(preds == labels.data)
+            train_ious.append(train_iou(train_labels, train_preds))
+            train_accuracies.append(train_accuracy)
+            print(f"Train_IoU: {train_iou(train_labels, train_preds)}; Train_Accuracy: {train_accuracy}")
+        training_corrects += torch.sum(train_preds == train_labels.data)
 
-        loss.backward()
+        train_total_loss.backward()
         optim.step()
-        running_loss += loss.item() * faces.size(0)
-    epoch_loss = running_loss / n_samples
-    epoch_acc = running_corrects / n_samples / num_of_patch / patch_size
-    print('epoch: {:} Train Loss: {:.4f} Acc: {:.4f}'.format(epoch, epoch_loss, epoch_acc))
-    message = 'epoch: {:} Train Loss: {:.4f} Acc: {:.4f}\n'.format(epoch, epoch_loss, epoch_acc)
-    with open(os.path.join('checkpoints', name, 'log.txt'), 'a') as f:
-        f.write(message)
+        training_loss += train_total_loss.item() * train_faces.size(0)
+
+    epoch_loss = training_loss / train_n_samples
+    epoch_acc = training_corrects / train_n_samples / num_of_patch / patch_size
+    return epoch_loss, epoch_acc
+
+    
+def valid(net, criterion, test_dataset, epoch, args):
+    net.eval()
+    acc = 0
+    validing_loss = 0
+    validing_corrects = 0
+    patch_size = 64
+    valid_n_samples = 0
+    valid_accuracies, valid_ious = [], []
+    # validation loop
+    with torch.no_grad():
+        for i, (face_patch, feats_patch, np_Fs, center_patch, coordinate_patch, valid_labels, filename) in enumerate(test_dataset):
+            #face_patch_tensor = torch.from_numpy(face_patch)
+            valid_faces = face_patch.cuda()
+            patch_size = valid_faces.size(2) 
+            num_of_patch = valid_faces.size(1) 
+
+            valid_feats = feats_patch.to(torch.float32).cuda()
+            valid_centers = center_patch.to(torch.float32).cuda()
+            valid_Fs = np_Fs.cuda() 
+            valid_cordinates = coordinate_patch.to(torch.float32).cuda()
+
+            valid_labels = valid_labels.to(torch.long).cuda()
+            valid_labels = valid_labels.reshape(valid_faces.shape[0], -1)
+
+            valid_n_samples += valid_faces.shape[0]
+
+            valid_outputs, valid_outputs_seg = net(valid_faces, valid_feats, valid_centers, valid_Fs, valid_cordinates)
+            valid_outputs = valid_outputs.reshape(valid_faces.shape[0], -1, args.seg_parts).permute(0, 2, 1)
+            valid_outputs_seg = valid_outputs_seg.reshape(valid_faces.shape[0], -1, args.seg_parts).permute(0, 2, 1)
+
+            valid_loss = criterion(valid_outputs, valid_labels)
+            valid_loss_seg = criterion(valid_outputs_seg, valid_labels)
+            valid_total_loss = args.lw1 * valid_loss + args.lw2 * valid_loss_seg
+
+            _, valid_preds = torch.max(valid_outputs_seg, 1)
+
+            # calculate iou & accuracy per batch size 
+            if i % 1 == 0:
+                valid_labels = valid_labels.to(device)
+                valid_preds = valid_preds.to(device)
+                # average valid_IoU score for classes
+                valid_iou = MulticlassJaccardIndex(num_classes=4).to(device)
+           
+                correct_preds = torch.sum(valid_preds == valid_labels.data)
+                total_preds = valid_labels.numel() #计算labels中元素的总数
+                valid_accuracy = correct_preds / total_preds
+
+                valid_ious.append(valid_iou(valid_labels, valid_preds))
+                valid_accuracies.append(valid_accuracy)
+                print(f"Valid_IoU: {valid_iou(valid_labels, valid_preds)}; Valid_Accuracy: {valid_accuracy}")
+        validing_corrects += torch.sum(valid_preds == valid_labels.data)
+        validing_loss += valid_total_loss.item() * valid_faces.size(0)
+
+    epoch_loss = validing_loss / valid_n_samples
+    epoch_acc = validing_corrects / valid_n_samples / num_of_patch / patch_size
+    return epoch_loss, epoch_acc
 
 
 if __name__ == '__main__':
@@ -159,15 +199,14 @@ if __name__ == '__main__':
     if args.augment_deformation:
         augments.append('deformation')
     train_dataset = SegmentationDataset(dataroot, mode='train', augments=augments)
-    val_dataset = SegmentationDataset(dataroot, mode='val')
-    
-    print("The number of training files:", len(train_dataset))
-    print("The number of valid files:", len(test_dataset))
+    test_dataset = SegmentationDataset(dataroot, mode='val')   # path: datasets/alien_small/val
+    print("The number of files in train dataset:", len(train_dataset))  # 40 files
+    print("The number of files in valid dataset:", len(test_dataset))   # 5  flies
 
     train_data_loader = data.DataLoader(train_dataset, num_workers=args.n_worker, batch_size=args.batch_size,
                                         shuffle=True, pin_memory=True)
-    val_data_loader = data.DataLoader(test_dataset, num_workers=args.n_worker, batch_size=args.batch_size,
-                                       shuffle=False, pin_memory=True)
+    valid_data_loader = data.DataLoader(test_dataset, num_workers=args.n_worker, batch_size=args.batch_size,
+                                      shuffle=False, pin_memory=True)
     # ========== Network ==========
 
     net = Mesh_baseline_seg(masking_ratio=args.mask_ratio,
@@ -206,14 +245,32 @@ if __name__ == '__main__':
         net.load_state_dict(torch.load(args.checkpoint), strict=False)
 
     train.step = 0
+    logs = checkpoint_path
+    writer = SummaryWriter(logs)
+
 
     if args.mode == 'train':
         for epoch in range(args.n_epoch):
             # train_data_loader.dataset.set_epoch()
             print('iteration', epoch)
-            train(net, optim, criterion, train_data_loader, epoch, args)
-            print('train finished')
-            #test(net, criterion, test_data_loader, epoch, args)
-            #print('test finished')
+            train_epoch_loss, train_epoch_acc = train(net, optim, criterion, train_data_loader, epoch, args)
+            valid_epoch_loss, valid_epoch_acc = valid(net, criterion, valid_data_loader, epoch, args)
+
+            print('/n epoch: {:} Train Loss: {:.4f} Train Acc: {:.4f} Valid Acc: {:.4f}'.format(epoch, train_epoch_loss, train_epoch_acc, valid_epoch_acc))
+            message = 'epoch: {:} Train Loss: {:.4f} Train Acc: {:.4f} Valid Acc: {:.4f}\n'.format(epoch, train_epoch_loss, train_epoch_acc, valid_epoch_acc)
+            with open(os.path.join('checkpoints', name, 'log.txt'), 'a') as f:
+                f.write(message)
+
             scheduler.step()
-            print(optim.param_groups[0]['lr'])
+            print('Learning Rate:', optim.param_groups[0]['lr'])
+            print('train finished')
+
+            writer.add_scalar('Loss', train_epoch_loss, global_step=epoch, walltime=epoch)
+            writer.add_scalar('Loss', valid_epoch_loss, global_step=epoch, walltime=epoch)
+            writer.add_scalar('Accuracy', train_epoch_acc, global_step=epoch, walltime=epoch)
+            writer.add_scalar('Accuracy', valid_epoch_acc, global_step=epoch, walltime=epoch)
+            
+        # save the weights
+        model_weight = copy.deepcopy(net.state_dict())
+        torch.save(model_weight, os.path.join('checkpoints', name, 'best.pkl'))
+        
