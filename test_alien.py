@@ -32,9 +32,7 @@ def seed_torch(seed=42):
 
 
 def test(net, criterion, test_dataset, epoch, args):
-
     net.eval()
-    acc = 0
     running_loss = 0
     running_corrects = 0
     n_samples = 0
@@ -63,7 +61,7 @@ def test(net, criterion, test_dataset, epoch, args):
         loss = 0.5 * loss + 0.5 * loss_seg
         _, preds = torch.max(outputs_seg, 1)
 
-         # calculate iou & accuracy per batch size 
+         # calculate iou & accuracy  
         if i % 1 == 0:
             test_labels = labels.to(device)
             test_preds = preds.to(device)
@@ -71,12 +69,12 @@ def test(net, criterion, test_dataset, epoch, args):
             test_iou = MulticlassJaccardIndex(num_classes=4).to(device)
            
             correct_preds = torch.sum(test_preds == test_labels.data)
-            total_preds = test_labels.numel() 
-            test_accuracy = correct_preds / total_preds
+            total_labels = test_labels.numel() 
+            test_accuracy = correct_preds / total_labels
 
             test_ious.append(test_iou(test_labels, test_preds))
             test_accuracies.append(test_accuracy)
-            print(f"Valid_IoU: {test_iou(test_labels, test_preds)}; Valid_Accuracy: {test_accuracy}")
+            print(f"Test_IoU: {test_iou(test_labels, test_preds)}; Test_Accuracy: {test_accuracy}")
 
         preds_cc = preds.cpu().detach().numpy().flatten()
         np.savetxt(f"predictions/{filename}.txt", preds_cc, newline="\n", fmt="%d")
@@ -92,7 +90,7 @@ def test(net, criterion, test_dataset, epoch, args):
 if __name__ == '__main__':
     seed_torch(seed=42)
     parser = argparse.ArgumentParser()
-    parser.add_argument('mode', choices=['train', 'test', 'val'])
+    parser.add_argument('mode', choices=['train', 'test'])
     parser.add_argument('--name', type=str, required=True)
     parser.add_argument('--dataroot', type=str, required=True)
     parser.add_argument('--checkpoint', type=str)
@@ -138,7 +136,6 @@ if __name__ == '__main__':
         augments.append('orient')
     if args.augment_deformation:
         augments.append('deformation')
-    #train_dataset = SegmentationDataset(dataroot, mode='train', augments=augments)
     test_dataset = SegmentationDataset(dataroot, mode='test')  #path: datasets/alien_small/test
 
     print("The number of files in test dataset:", len(test_dataset))
@@ -183,10 +180,8 @@ if __name__ == '__main__':
 
     
     test.best_acc = 0
-
     if args.mode == 'test':
         for epoch in range(args.n_epoch):
             test_epoch_acc, test_epoch_loss = test(net, criterion, test_data_loader, 0, args)
-            print('epoch: {:} test Loss: {:.4f} Acc: {:.4f}'.format(epoch, test_epoch_loss, test_epoch_acc))
-            message = 'epoch: {:} test Loss: {:.4f} Acc: {:.4f}\n'.format(epoch, test_epoch_loss, test_epoch_acc)
+            print('epoch: {:} Test Loss: {:.4f} Test Acc: {:.4f}'.format(epoch, test_epoch_loss, test_epoch_acc))
     
