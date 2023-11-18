@@ -18,7 +18,7 @@ with open(file_path, 'r') as file:
             valid_accs.append(float(parts[10]))
 
 
-# 绘制训练准确率和验证准确率随epoch变化的图表
+# Plotting training accuracy and validation accuracy per epoch
 plt.figure(figsize=(10, 5))
 plt.plot(epochs, train_accs, label='Train Accuracy', marker='o')
 plt.plot(epochs, valid_accs, label='Validation Accuracy', marker='o')
@@ -29,7 +29,7 @@ plt.legend()
 plt.grid(True)
 plt.show()
 
-# 绘制训练损失随epoch变化的图表
+# Plotting training loss as epoch changes
 plt.figure(figsize=(10, 5))
 plt.plot(epochs, train_losses, label='Train Loss', marker='o')
 plt.xlabel('Epoch')
